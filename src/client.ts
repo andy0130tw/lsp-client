@@ -1,5 +1,5 @@
 import type * as lsp from "vscode-languageserver-protocol"
-import {showDialog} from "@codemirror/view"
+import {EditorView, showDialog} from "@codemirror/view"
 import {ChangeSet, ChangeDesc, MapMode, Text} from "@codemirror/state"
 import {Language} from "@codemirror/language"
 import {LSPPlugin} from "./plugin"
@@ -28,7 +28,7 @@ const clientCapabilities: lsp.ClientCapabilities = {
     markdown: {
       parser: "marked",
     },
-  },            
+  },
   textDocument: {
     completion: {
       completionItem: {
@@ -146,7 +146,7 @@ const defaultNotificationHandlers: {[method: string]: (client: LSPClient, params
   },
   "window/showMessage": (client, params: lsp.ShowMessageParams) => {
     if (params.type > 3 /* Info */) return
-    let view
+    let view: EditorView | null | undefined
     for (let f of client.workspace.files) if (view = f.getView()) break
     if (view) showDialog(view, {
       label: params.message,
