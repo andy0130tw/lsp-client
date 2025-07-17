@@ -161,7 +161,20 @@ export const serverCompletionSource: CompletionSource = context => {
         } else if (option.label != text) {
           option.apply = text
         }
-        if (item.documentation) option.info = () => renderDocInfo(plugin, item.documentation!)
+        if (item.documentation) {
+          option.info = () => renderDocInfo(plugin, item.documentation!)
+        } else {
+          option.info = () => plugin.client.request<lsp.CompletionItem, lsp.CompletionItem>('completionItem/resolve', item)
+            .then(
+              itemResolved => {
+                return itemResolved.documentation ? renderDocInfo(plugin, itemResolved.documentation) : null
+              },
+              err => {
+                if ("code" in err && (err as lsp.ResponseError).code == -32600 /* InvalidRequest */)
+                  return null
+                throw new Error(err.message)
+              })
+        }
         return option
       }),
       commitCharacters: defaultCommitChars,

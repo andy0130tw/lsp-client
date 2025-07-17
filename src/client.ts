@@ -36,6 +36,9 @@ const clientCapabilities: lsp.ClientCapabilities = {
         snippetSupport: true,
         documentationFormat: ["markdown", "plaintext"],
         insertReplaceSupport: false,
+        resolveSupport: {
+          properties: ["documentation"],
+        },
       },
       completionList: {
         itemDefaults: ["commitCharacters", "editRange", "insertTextFormat"]
