@@ -6,7 +6,7 @@ import {LSPClientConfig, LSPClient, LSPPlugin, renameSymbol,
 import {EditorView, EditorViewConfig} from "@codemirror/view"
 import {javascript} from "@codemirror/lang-javascript"
 import {syntaxHighlighting} from "@codemirror/language"
-import {startCompletion, currentCompletions, acceptCompletion, autocompletion, moveCompletionSelection} from "@codemirror/autocomplete"
+import {startCompletion, currentCompletions, acceptCompletion, autocompletion, moveCompletionSelection, CompletionInfo} from "@codemirror/autocomplete"
 import {classHighlighter} from "@lezer/highlight"
 import {DummyServer} from "./server.js"
 
@@ -280,6 +280,26 @@ describe("LSPClient", () => {
       ist(cm.dom.querySelector(".cm-completionInfo"))
       acceptCompletion(cm)
       ist(cm.state.sliceDoc(), "..one!\nookay")
+    })
+
+    it("can resolve a completion item to get its documentation", async () => {
+      let {client} = setup({server: {delay: {"completionItem/resolve": 100}}})
+      let cm = ed(client, {doc: "..o", selection: {anchor: 3}, extensions: [
+        serverCompletion(),
+        autocompletion({interactionDelay: 0, activateOnTypingDelay: 10})
+      ]})
+      startCompletion(cm)
+      await wait(60)
+      let cs = currentCompletions(cm.state)
+      ist(cs[0].label, "one!")
+      ist(cm.dom.querySelector(".cm-completionInfo"), undefined)
+      ist(typeof cs[0].info, "function")
+      const infoReturn = (cs[0].info as () => CompletionInfo | Promise<CompletionInfo>)()
+      ist(infoReturn != null && "then" in infoReturn)
+      await (infoReturn as Promise<CompletionInfo>)
+      const activeInfo = cm.dom.querySelector(".cm-completionInfo")
+      ist(activeInfo)
+      ist(activeInfo?.textContent, "just one")
     })
   })
 

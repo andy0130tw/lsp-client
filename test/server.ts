@@ -59,6 +59,16 @@ const requestHandlers: {[method: string]: (params: any, server: DummyServer) => 
     }
   },
 
+  "completionItem/resolve": (params: lsp.CompletionItem, server): lsp.CompletionItem => {
+    if (params.documentation != null) {
+      return params
+    }
+    if (params.label === "one") {
+      return { ...params, documentation: "just one" }
+    }
+    throw new Error("Attempt to resolve an item not in the returned completion list")
+  },
+
   "textDocument/hover": (params: lsp.HoverParams, server): lsp.Hover | null => {
     return {
       range: {start: params.position, end: params.position},

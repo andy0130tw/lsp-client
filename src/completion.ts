@@ -81,7 +81,20 @@ export const serverCompletionSource: CompletionSource = context => {
           option.commitCharacters = item.commitCharacters
         if (item.detail) option.detail = item.detail
         if (item.insertTextFormat == 2 /* Snippet */) option.apply = (view, c, from, to) => snippet(text)(view, c, from, to)
-        if (item.documentation) option.info = () => renderDocInfo(plugin, item.documentation!)
+        if (item.documentation) {
+          option.info = () => renderDocInfo(plugin, item.documentation!)
+        } else {
+          option.info = () => plugin.client.request<lsp.CompletionItem, lsp.CompletionItem>('completionItem/resolve', item)
+            .then(
+              itemResolved => {
+                return itemResolved.documentation ? renderDocInfo(plugin, itemResolved.documentation) : null
+              },
+              err => {
+                if ("code" in err && (err as lsp.ResponseError).code == -32600 /* InvalidRequest */)
+                  return null
+                throw err
+              })
+        }
         return option
       }),
       commitCharacters: defaultCommitChars,
