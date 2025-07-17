@@ -5,7 +5,10 @@ const serverCapabilities: lsp.ServerCapabilities = {
   textDocumentSync: {openClose: true, change: 2},
   renameProvider: true,
   documentFormattingProvider: true,
-  completionProvider: {triggerCharacters: [","]},
+  completionProvider: {
+    triggerCharacters: [","],
+    resolveProvider: true,
+  },
   hoverProvider: true,
   signatureHelpProvider: {},
 }

@@ -1,6 +1,6 @@
 import type * as lsp from "vscode-languageserver-protocol"
 import {EditorState, Extension, Facet, ChangeDesc, ChangeSpec} from "@codemirror/state"
-import {EditorView} from "@codemirror/view"
+import {EditorView, logException} from "@codemirror/view"
 import {CompletionSource, Completion, CompletionResult, CompletionContext,
         snippet, autocompletion, insertCompletionText} from "@codemirror/autocomplete"
 import {LSPPlugin} from "./plugin"
@@ -133,6 +133,9 @@ export const serverCompletionSource: CompletionSource = context => {
     let config = context.state.facet(completionConfig)
     let extraEdits: ExtraEdits[] = []
 
+    // cache the resolving promise for option.info
+    const resolvingItem = new WeakMap<lsp.CompletionItem, Promise<lsp.CompletionItem | null>>()
+
     return {
       from, to,
       options: result.items.map<Completion>((item, i) => {
@@ -163,17 +166,17 @@ export const serverCompletionSource: CompletionSource = context => {
         }
         if (item.documentation) {
           option.info = () => renderDocInfo(plugin, item.documentation!)
-        } else {
-          option.info = () => plugin.client.request<lsp.CompletionItem, lsp.CompletionItem>('completionItem/resolve', item)
-            .then(
-              itemResolved => {
-                return itemResolved.documentation ? renderDocInfo(plugin, itemResolved.documentation) : null
-              },
-              err => {
-                if ("code" in err && (err as lsp.ResponseError).code == -32600 /* InvalidRequest */)
-                  return null
-                throw new Error(err.message)
-              })
+        } else if (plugin.client.serverCapabilities?.completionProvider?.resolveProvider) {
+          option.info = () => new Promise<lsp.CompletionItem | null>(resolve => {
+            if (resolvingItem.has(item)) return resolve(resolvingItem.get(item)!)
+            const request = plugin.client.request<lsp.CompletionItem, lsp.CompletionItem>("completionItem/resolve", item)
+              // FIXME: should not ignore the error if the resolution fails
+              .catch(() => { resolvingItem.delete(item); return null })
+            resolvingItem.set(item, request)
+            return resolve(request)
+          }).then(
+            item => item?.documentation ? renderDocInfo(plugin, item.documentation) : null,
+          )
         }
         return option
       }),
@@ -184,6 +187,11 @@ export const serverCompletionSource: CompletionSource = context => {
   }, err => {
     if ("code" in err && (err as lsp.ResponseError).code == -32800 /* RequestCancelled */)
       return null
+    // throwing the error will cause the completion source stop working, so we try to notify the view first
+    if (context.view) {
+      logException(context.view.state, err, "lsp-client serverCompletionSource")
+      return null
+    }
     throw err
   })
 }
