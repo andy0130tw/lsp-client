@@ -299,7 +299,7 @@ describe("LSPClient", () => {
       await (infoReturn as Promise<CompletionInfo>)
       const activeInfo = cm.dom.querySelector(".cm-completionInfo")
       ist(activeInfo)
-      ist(activeInfo?.textContent, "just one")
+      ist(activeInfo!.textContent, "just one")
     })
   })
 
