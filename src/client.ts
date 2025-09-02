@@ -1,10 +1,11 @@
 import type * as lsp from "vscode-languageserver-protocol"
 import {EditorView, showDialog} from "@codemirror/view"
-import {ChangeSet, ChangeDesc, MapMode, Text} from "@codemirror/state"
+import {ChangeSet, ChangeDesc, MapMode, Text, Extension} from "@codemirror/state"
 import {Language} from "@codemirror/language"
-import {LSPPlugin} from "./plugin"
+import {LSPPlugin, lspPlugin} from "./plugin"
 import {toPosition, fromPosition} from "./pos"
 import {Workspace, WorkspaceFile, DefaultWorkspace} from "./workspace"
+import {lspTheme} from "./theme"
 
 class Request<Result> {
   declare resolve: (result: Result) => void
@@ -63,7 +64,11 @@ const clientCapabilities: lsp.ClientCapabilities = {
     implementation: {},
     typeDefinition: {},
     references: {},
+    diagnostic: {},
   },
+  window: {
+    showMessage: {}
+  }
 }
 
 /// A workspace mapping is used to track changes made to open
@@ -194,6 +199,33 @@ export type LSPClientConfig = {
   /// When no handler is found for a notification, it will be passed
   /// to this function, if given.
   unhandledNotification?: (client: LSPClient, method: string, params: any) => void
+  /// Provide a set of extensions, which may be plain CodeMirror
+  /// extensions, or objects containing additional client capabilities
+  /// or notification handlers. Any CodeMirror extensions provided
+  /// here will be included in the extension returned by
+  /// [`LSPPlugin.create`](#lsp-client.LSPPlugin^create).
+  extensions?: readonly (Extension | LSPClientExtension)[]
+}
+
+/// Objects of this type can be included in the
+/// [`extensions`](#lsp-client.LSPClientConfig.extensions) option to
+/// `LSPClient` to modularly configure client capabilities or
+/// notification handlers.
+export type LSPClientExtension = {
+  /// Extra [client
+  /// capabilities](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#clientCapabilities)
+  /// to send to the server when initializing. The object provided
+  /// here will be merged with the capabilities the client provides by
+  /// default.
+  clientCapabilities?: Record<string, any>,
+  /// Additional [notification
+  /// handlers](#lsp-client.LSPClientConfig.notificationHandlers).
+  /// These will be tried after notification handlers defined directly
+  /// in the config object, and then in order of appearance in the
+  /// [`extensions`](#lsp-client.LSPClientConfig.extensions) array.
+  notificationHandlers?: {[method: string]: (client: LSPClient, params: any) => boolean},
+  /// An optional CodeMirror extension to include.
+  editorExtension?: Extension
 }
 
 /// An LSP client manages a connection to a language server. It should
@@ -217,6 +249,8 @@ export class LSPClient {
   initializing: Promise<null>
   declare private init: {resolve: (value: null) => void, reject: (err: any) => void}
   private timeout: number
+  /// @internal
+  extensions: Extension[] = []
 
   /// Create a client object.
   constructor(
@@ -227,6 +261,11 @@ export class LSPClient {
     this.initializing = new Promise((resolve, reject) => this.init = {resolve, reject})
     this.timeout = config.timeout ?? 3000
     this.workspace = config.workspace ? config.workspace(this) : new DefaultWorkspace(this)
+
+    if (config.extensions) for (let ext of config.extensions) {
+      if (Array.isArray(ext) || (ext as any).extension) this.extensions.push(ext as Extension)
+      else if ((ext as LSPClientExtension).editorExtension) this.extensions.push((ext as LSPClientExtension).editorExtension!)
+    }
   }
 
   /// Whether this client is connected (has a transport).
@@ -240,11 +279,16 @@ export class LSPClient {
     if (this.transport) this.transport.unsubscribe(this.receiveMessage)
     this.transport = transport
     transport.subscribe(this.receiveMessage)
+    let capabilities = clientCapabilities
+    if (this.config.extensions) for (let ext of this.config.extensions) {
+      let {clientCapabilities} = ext as LSPClientExtension
+      if (clientCapabilities) capabilities = mergeCapabilities(capabilities, clientCapabilities)
+    }
     this.requestInner<lsp.InitializeParams, lsp.InitializeResult>("initialize", {
       processId: null,
       clientInfo: {name: "@codemirror/lsp-client"},
       rootUri: this.config.rootUri || null,
-      capabilities: clientCapabilities
+      capabilities
     }).promise.then(resp => {
       this.serverCapabilities = resp.capabilities
       let sync = resp.capabilities.textDocumentSync
@@ -262,6 +306,29 @@ export class LSPClient {
     this.serverCapabilities = null
     this.initializing = new Promise((resolve, reject) => this.init = {resolve, reject})
     this.workspace.disconnected()
+  }
+
+  /// Create a plugin for this client, to add to an editor
+  /// configuration. This extension is necessary to use LSP-related
+  /// functionality exported by this package. The returned extension
+  /// will include the editor
+  /// extensions included in this client's
+  /// [configuration](#lsp-client.LSPClientConfig.extensions).
+  ///
+  /// Creating an editor with this plugin will cause
+  /// [`openFile`](#lsp-client.Workspace.openFile) to be called on the
+  /// workspace.
+  ///
+  /// By default, the language ID given to the server for this file is
+  /// derived from the editor's language configuration via
+  /// [`Language.name`](#language.Language.name). You can pass in
+  /// a specific ID as a third parameter.
+  plugin(fileURI: string, languageID?: string): Extension {
+    return [
+      lspPlugin.of({client: this, uri: fileURI, languageID}),
+      lspTheme,
+      this.extensions
+    ]
   }
 
   /// Send a `textDocument/didOpen` notification to the server.
@@ -297,6 +364,11 @@ export class LSPClient {
     } else if (!("id" in value)) {
       let handler = this.config.notificationHandlers?.[value.method]
       if (handler && handler(this, value.params)) return
+      if (this.config.extensions) for (let ext of this.config.extensions) {
+        let {notificationHandlers} = ext as LSPClientExtension
+        let handler = notificationHandlers?.[value.method]
+        if (handler && handler(this, value.params)) return
+      }
       let deflt = defaultNotificationHandlers[value.method]
       if (deflt) deflt(this, value.params)
       else if (this.config.unhandledNotification) this.config.unhandledNotification(this, value.method, value.params)
@@ -428,4 +500,16 @@ function contentChangesFor(
     })
   })
   return events.reverse()
+}
+
+function mergeCapabilities(base: any, add?: any) {
+  if (add == null) return base
+  if (typeof base != "object" || typeof add != "object") return add
+  let result: Record<string, any> = {}
+  let baseProps = Object.keys(base), addProps = Object.keys(add)
+  for (let prop of baseProps)
+    result[prop] = addProps.indexOf(prop) > -1 ? mergeCapabilities(base[prop], add[prop]) : base[prop]
+  for (let prop of addProps)
+    if (baseProps.indexOf(prop) < 0) result[prop] = add[prop]
+  return result
 }

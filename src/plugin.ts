@@ -5,7 +5,6 @@ import {language} from "@codemirror/language"
 import {type LSPClient} from "./client"
 import {docToHTML, withContext} from "./text"
 import {toPosition, fromPosition} from "./pos"
-import {lspTheme} from "./theme"
 
 /// A plugin that connects a given editor to a language server client.
 export class LSPPlugin {
@@ -27,6 +26,7 @@ export class LSPPlugin {
       languageID = lang ? lang.name : ""
     }
     client.workspace.openFile(uri, languageID, view)
+    this.syncedDoc = view.state.doc
     this.unsyncedChanges = ChangeSet.empty(view.state.doc.length)
   }
 
@@ -58,6 +58,9 @@ export class LSPPlugin {
     })
   }
 
+  /// The version of the document that was synchronized to the server.
+  syncedDoc: Text
+
   /// The changes accumulated in this editor that have not been sent
   /// to the server yet.
   unsyncedChanges: ChangeSet
@@ -66,6 +69,7 @@ export class LSPPlugin {
   /// changes](#lsp-client.LSPPlugin.unsyncedChanges). Should probably
   /// only be called by a [workspace](#lsp-client.Workspace).
   clear() {
+    this.syncedDoc = this.view.state.doc
     this.unsyncedChanges = ChangeSet.empty(this.view.state.doc.length)
   }
 
@@ -85,19 +89,10 @@ export class LSPPlugin {
     return view.plugin(lspPlugin)
   }
 
-  /// Create an editor extension that connects that editor to the
-  /// given LSP client. This extension is necessary to use LSP-related
-  /// functionality exported by this package. Creating an editor with
-  /// this plugin will cause
-  /// [`openFile`](#lsp-client.Workspace.openFile) to be called on the
-  /// workspace.
-  ///
-  /// By default, the language ID given to the server for this file is
-  /// derived from the editor's language configuration via
-  /// [`Language.name`](#language.Language.name). You can pass in
-  /// a specific ID as a third parameter.
+  /// Deprecated. Use
+  /// [`LSPClient.plugin`](#lsp-client.LSPClient.plugin) instead.
   static create(client: LSPClient, fileURI: string, languageID?: string): Extension {
-    return [lspPlugin.of({client, uri: fileURI, languageID}), lspTheme]
+    return client.plugin(fileURI, languageID)
   }
 }
 
