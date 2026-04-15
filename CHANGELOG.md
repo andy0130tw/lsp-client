@@ -1,3 +1,11 @@
+## 6.2.3 (2026-04-15)
+
+### Bug fixes
+
+Don't crash when trying to jump to a symbol that the server does not provide a location for.
+
+Fix the argument passed to cancel requests.
+
 ## 6.2.2 (2026-03-02)
 
 ### Bug fixes
