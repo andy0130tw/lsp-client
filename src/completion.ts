@@ -112,7 +112,7 @@ export const serverCompletionSource: CompletionSource = context => {
         return option
       }),
       commitCharacters: defaultCommitChars,
-      validFor: config.validFor ?? prefixRegexp(result.items),
+      validFor: result.isIncomplete ? undefined : (config.validFor ?? prefixRegexp(result.items)),
       map: (result, changes) => ({...result, from: changes.mapPos(result.from)}),
     }
   }, err => {
