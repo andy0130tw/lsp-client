@@ -62,21 +62,29 @@ function prefixRegexp(items: readonly lsp.CompletionItem[]) {
   return new RegExp("^(?:" + prefixes.map((RegExp as any).escape || (s => s.replace(/[^\w\s]/g, "\\$&"))).join("|") + ")?\\w*$")
 }
 
+function shouldTriggerCompletion(plugin: LSPPlugin, character: string) : 'identifier' | 'triggerCharacter' | null {
+  let triggers = plugin.client.serverCapabilities?.completionProvider?.triggerCharacters
+  if (triggers !== undefined && triggers.indexOf(character) > -1) return 'triggerCharacter'
+  if (/[a-zA-Z_]/.test(character)) return 'identifier'
+  return null
+}
+
 /// A completion source that requests completions from a language
 /// server.
 export const serverCompletionSource: CompletionSource = context => {
   const plugin = context.view && LSPPlugin.get(context.view)
   if (!plugin) return null
-  let triggerChar = ""
-  if (!context.explicit) {
-    triggerChar = context.view.state.sliceDoc(context.pos - 1, context.pos)
-    let triggers = plugin.client.serverCapabilities?.completionProvider?.triggerCharacters
-    if (!/[a-zA-Z_]/.test(triggerChar) && !(triggers && triggers.indexOf(triggerChar) > -1)) return null
+  let triggerChar = context.state.sliceDoc(context.pos - 1, context.pos)
+  let triggerReason = context.explicit ? 'invoked' : shouldTriggerCompletion(plugin, triggerChar)
+  let completionContext: lsp.CompletionContext;
+  if (triggerReason === null) {
+    return null;
+  } else if (triggerReason === 'triggerCharacter') {
+    completionContext = {triggerKind: 2 /* TriggerCharacter */, triggerCharacter: triggerChar}
+  } else {
+    completionContext = {triggerKind: 1 /* Invoked */}
   }
-  return getCompletions(plugin, context.pos, {
-    triggerCharacter: triggerChar,
-    triggerKind: context.explicit ? 1 /* Invoked */ : 2 /* TriggerCharacter */
-  }, context).then(result => {
+  return getCompletions(plugin, context.pos, completionContext, context).then(result => {
     if (!result) return null
     if (Array.isArray(result)) result = {items: result} as lsp.CompletionList
     let {from, to} = completionResultRange(context, result)
