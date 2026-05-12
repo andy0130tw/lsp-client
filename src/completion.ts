@@ -99,11 +99,12 @@ export const serverCompletionSource: CompletionSource = context => {
           label: text,
           type: item.kind && kindToType[item.kind],
         }
+        let insertTextFormat = item.insertTextFormat ?? result.itemDefaults?.insertTextFormat
         if (item.commitCharacters && item.commitCharacters != defaultCommitChars)
           option.commitCharacters = item.commitCharacters
         if (item.detail) option.detail = item.detail
         if (item.sortText) option.sortText = item.sortText
-        if (item.insertTextFormat == 2 /* Snippet */) {
+        if (insertTextFormat == 2 /* Snippet */) {
           option.apply = (view, c, from, to) => snippet(text.replace(/\$(\d+)/g, "${$1}"))(view, c, from, to)
           option.label = item.label
         }
