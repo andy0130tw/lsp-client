@@ -34,7 +34,7 @@ const clientCapabilities: lsp.ClientCapabilities = {
     completion: {
       completionItem: {
         snippetSupport: true,
-        documentationFormat: ["plaintext", "markdown"],
+        documentationFormat: ["markdown", "plaintext"],
         insertReplaceSupport: false,
       },
       completionList: {
