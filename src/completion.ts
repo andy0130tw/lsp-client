@@ -96,7 +96,8 @@ export const serverCompletionSource: CompletionSource = context => {
       options: result.items.map<Completion>(item => {
         let text = item.textEdit?.newText || item.textEditText || item.insertText || item.label
         let option: Completion = {
-          label: text,
+          label: item.filterText || item.label,
+          displayLabel: item.label,
           type: item.kind && kindToType[item.kind],
         }
         let insertTextFormat = item.insertTextFormat ?? result.itemDefaults?.insertTextFormat
@@ -106,7 +107,8 @@ export const serverCompletionSource: CompletionSource = context => {
         if (item.sortText) option.sortText = item.sortText
         if (insertTextFormat == 2 /* Snippet */) {
           option.apply = (view, c, from, to) => snippet(text.replace(/\$(\d+)/g, "${$1}"))(view, c, from, to)
-          option.label = item.label
+        } else if (option.label != text) {
+          option.apply = text
         }
         if (item.documentation) option.info = () => renderDocInfo(plugin, item.documentation!)
         return option
