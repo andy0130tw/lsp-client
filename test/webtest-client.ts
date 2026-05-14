@@ -268,7 +268,7 @@ describe("LSPClient", () => {
       await wait(60)
       let cs = currentCompletions(cm.state)
       ist(cs.length, 2)
-      ist(cs[0].label, "one!")
+      ist(cs[0].label, "one")
       ist(cs[1].label, "ookay")
       acceptCompletion(cm)
       ist(cm.state.sliceDoc(), "..one!")
@@ -279,7 +279,7 @@ describe("LSPClient", () => {
       await wait()
       ist(cm.dom.querySelector(".cm-completionInfo"))
       acceptCompletion(cm)
-      ist(cm.state.sliceDoc(), "..one!\nookay")
+      ist(cm.state.sliceDoc(), "..one!\nokay")
     })
   })
 

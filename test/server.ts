@@ -54,7 +54,7 @@ const requestHandlers: {[method: string]: (params: any, server: DummyServer) => 
       },
       items: [
         {label: "one", kind: 14, commitCharacters: ["."], textEdit: {newText: "one!", range: {start: before, end: params.position}}},
-        {label: "okay", kind: 7, documentation: "`code` stuff", insertText: "ookay"},
+        {label: "ookay", kind: 7, documentation: "`code` stuff", insertText: "okay"},
       ]
     }
   },
