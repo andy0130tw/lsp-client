@@ -62,10 +62,10 @@ function prefixRegexp(items: readonly lsp.CompletionItem[]) {
   return new RegExp("^(?:" + prefixes.map((RegExp as any).escape || (s => s.replace(/[^\w\s]/g, "\\$&"))).join("|") + ")?\\w*$")
 }
 
-function shouldTriggerCompletion(plugin: LSPPlugin, character: string) : 'identifier' | 'triggerCharacter' | null {
+function shouldTriggerCompletion(plugin: LSPPlugin, character: string) : "identifier" | "triggerCharacter" | null {
   let triggers = plugin.client.serverCapabilities?.completionProvider?.triggerCharacters
-  if (triggers !== undefined && triggers.indexOf(character) > -1) return 'triggerCharacter'
-  if (/[a-zA-Z_]/.test(character)) return 'identifier'
+  if (triggers && triggers.indexOf(character) > -1) return "triggerCharacter"
+  if (/[a-zA-Z_]/.test(character)) return "identifier"
   return null
 }
 
@@ -75,15 +75,11 @@ export const serverCompletionSource: CompletionSource = context => {
   const plugin = context.view && LSPPlugin.get(context.view)
   if (!plugin) return null
   let triggerChar = context.state.sliceDoc(context.pos - 1, context.pos)
-  let triggerReason = context.explicit ? 'invoked' : shouldTriggerCompletion(plugin, triggerChar)
-  let completionContext: lsp.CompletionContext;
-  if (triggerReason === null) {
-    return null;
-  } else if (triggerReason === 'triggerCharacter') {
-    completionContext = {triggerKind: 2 /* TriggerCharacter */, triggerCharacter: triggerChar}
-  } else {
-    completionContext = {triggerKind: 1 /* Invoked */}
-  }
+  let triggerReason = context.explicit ? "invoked" : shouldTriggerCompletion(plugin, triggerChar)
+  if (!triggerReason) return null
+  let completionContext: lsp.CompletionContext = triggerReason == "triggerCharacter"
+    ? {triggerKind: 2 /* TriggerCharacter */, triggerCharacter: triggerChar}
+    : {triggerKind: 1 /* Invoked */}
   return getCompletions(plugin, context.pos, completionContext, context).then(result => {
     if (!result) return null
     if (Array.isArray(result)) result = {items: result} as lsp.CompletionList
