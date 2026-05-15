@@ -1,6 +1,6 @@
 {
   "name": "@codemirror/lsp-client",
-  "version": "6.2.3",
+  "version": "6.2.4",
   "description": "Language server protocol client for CodeMirror",
   "keywords": [
     "codemirror",

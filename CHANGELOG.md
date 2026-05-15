@@ -1,3 +1,13 @@
+## 6.2.4 (2026-05-15)
+
+### Bug fixes
+
+Tell the server we prefer Markdown docs over plain text.
+
+Support completion-set-wide `insertTextFormat` options.
+
+Support separate filter and display names for completions.
+
 ## 6.2.3 (2026-04-15)
 
 ### Bug fixes
