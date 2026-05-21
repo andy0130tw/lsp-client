@@ -3,6 +3,19 @@ import {EditorState, Extension, Facet} from "@codemirror/state"
 import {CompletionSource, Completion, CompletionContext, snippet, autocompletion} from "@codemirror/autocomplete"
 import {LSPPlugin} from "./plugin"
 
+// Translate an LSP snippet (the `insertText` of a completion item with
+// `insertTextFormat == Snippet`) into a CodeMirror snippet template. LSP uses
+// bare numeric tab stops (`$1`, `$0`) and backslash escapes (`\$`, `\}`, `\\`),
+// whereas CodeMirror only recognizes brace fields (`${1}`, `${1:placeholder}`)
+// and treats a bare `$` as literal. So we unescape the LSP escapes and wrap
+// bare numeric tab stops in braces, leaving `${…}` fields (shared by both
+// syntaxes) untouched. Without the unescaping a `\$` would survive into the
+// document verbatim (e.g. `foo(\$bar)`).
+function lspToSnippet(text: string): string {
+  return text.replace(/\\([$}\\])|\$(\d+)/g, (_m, escaped, field) =>
+    escaped != null ? escaped : "${" + field + "}")
+}
+
 /// Register the [language server completion
 /// source](#lsp-client.serverCompletionSource) as an autocompletion
 /// source.
@@ -102,7 +115,7 @@ export const serverCompletionSource: CompletionSource = context => {
         if (item.detail) option.detail = item.detail
         if (item.sortText) option.sortText = item.sortText
         if (insertTextFormat == 2 /* Snippet */) {
-          option.apply = (view, c, from, to) => snippet(text.replace(/\$(\d+)/g, "${$1}"))(view, c, from, to)
+          option.apply = (view, c, from, to) => snippet(lspToSnippet(text))(view, c, from, to)
         } else if (option.label != text) {
           option.apply = text
         }

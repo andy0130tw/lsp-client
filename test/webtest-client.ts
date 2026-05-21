@@ -281,6 +281,22 @@ describe("LSPClient", () => {
       acceptCompletion(cm)
       ist(cm.state.sliceDoc(), "..one!\nokay")
     })
+
+    it("expands snippet completions and unescapes LSP escapes", async () => {
+      let {client} = setup()
+      let cm = ed(client, {doc: "..f", selection: {anchor: 3}, extensions: [
+        serverCompletion(),
+        autocompletion({interactionDelay: 0, activateOnTypingDelay: 10})
+      ]})
+      startCompletion(cm)
+      await wait(60)
+      let cs = currentCompletions(cm.state)
+      ist(cs.length, 1)
+      ist(cs[0].label, "fn")
+      acceptCompletion(cm)
+      // `\$arg` must come through as a literal `$arg`, not the raw `\$arg`.
+      ist(cm.state.sliceDoc(), "..fn($arg)")
+    })
   })
 
   describe("hoverTooltips", () => {
