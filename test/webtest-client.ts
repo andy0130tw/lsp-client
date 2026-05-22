@@ -297,6 +297,46 @@ describe("LSPClient", () => {
       // `\$arg` must come through as a literal `$arg`, not the raw `\$arg`.
       ist(cm.state.sliceDoc(), "..fn($arg)")
     })
+
+    it("applies additionalTextEdits (e.g. an auto-import)", async () => {
+      let {client} = setup()
+      let cm = ed(client, {doc: "..b", selection: {anchor: 3}, extensions: [
+        serverCompletion(),
+        autocompletion({interactionDelay: 0, activateOnTypingDelay: 10})
+      ]})
+      startCompletion(cm)
+      await wait(60)
+      let cs = currentCompletions(cm.state)
+      ist(cs.length, 1)
+      ist(cs[0].label, "Bar")
+      acceptCompletion(cm)
+      // The completion inserts "Bar" *and* the item's additionalTextEdits add
+      // the `use Bar;` line at the top.
+      ist(cm.state.sliceDoc(), "use Bar;\n..Bar")
+    })
+
+    it("maps additionalTextEdit positions through changes that arrive while the completion is active", async () => {
+      let {client} = setup()
+      // Server's "Zap" completion ships an additionalTextEdit at line 2,
+      // char 0 — i.e. the start of "L2" in this document.
+      let cm = ed(client, {doc: "L0\nL1\nL2\n..z", selection: {anchor: 12}, extensions: [
+        serverCompletion(),
+        autocompletion({interactionDelay: 0, activateOnTypingDelay: 10})
+      ]})
+      startCompletion(cm)
+      await wait(60)
+      let cs = currentCompletions(cm.state)
+      ist(cs.length, 1)
+      ist(cs[0].label, "Zap")
+      // Insert a line at the very top. This is far from the cursor, so CM
+      // keeps the completion alive — but the LSP edit's `line: 2` now refers
+      // to a different line in the new document.
+      cm.dispatch({changes: {from: 0, insert: "HEADER\n"}})
+      acceptCompletion(cm)
+      // The "MID\n" insertion should land before the *original* L2 line,
+      // which after the HEADER insertion is the third line.
+      ist(cm.state.sliceDoc(), "HEADER\nL0\nL1\nMID\nL2\n..Zap")
+    })
   })
 
   describe("hoverTooltips", () => {

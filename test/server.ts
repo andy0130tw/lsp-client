@@ -56,6 +56,12 @@ const requestHandlers: {[method: string]: (params: any, server: DummyServer) => 
         {label: "one", kind: 14, commitCharacters: ["."], textEdit: {newText: "one!", range: {start: before, end: params.position}}},
         {label: "ookay", kind: 7, documentation: "`code` stuff", insertText: "okay"},
         {label: "fn", kind: 3, insertText: "fn(${1:\\$arg})$0", insertTextFormat: 2},
+        {label: "Bar", kind: 7, insertText: "Bar", additionalTextEdits: [
+          {range: {start: {line: 0, character: 0}, end: {line: 0, character: 0}}, newText: "use Bar;\n"},
+        ]},
+        {label: "Zap", kind: 7, insertText: "Zap", additionalTextEdits: [
+          {range: {start: {line: 2, character: 0}, end: {line: 2, character: 0}}, newText: "MID\n"},
+        ]},
       ]
     }
   },
