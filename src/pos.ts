@@ -11,3 +11,10 @@ export function fromPosition(doc: Text, pos: lsp.Position): number {
   return line.from + pos.character
 }
 
+export function fromPositionChecked(doc: Text, pos: lsp.Position): number | null {
+  if (pos.line < 0 || pos.line >= doc.lines) return null
+  let line = doc.line(pos.line + 1)
+  if (pos.character < 0 || pos.character > line.length) return null
+  return line.from + pos.character
+}
+

@@ -1,7 +1,10 @@
 import type * as lsp from "vscode-languageserver-protocol"
-import {EditorState, Extension, Facet} from "@codemirror/state"
-import {CompletionSource, Completion, CompletionContext, snippet, autocompletion} from "@codemirror/autocomplete"
+import {EditorState, Extension, Facet, ChangeDesc, ChangeSpec} from "@codemirror/state"
+import {EditorView} from "@codemirror/view"
+import {CompletionSource, Completion, CompletionResult, CompletionContext,
+        snippet, autocompletion, insertCompletionText} from "@codemirror/autocomplete"
 import {LSPPlugin} from "./plugin"
+import {fromPositionChecked} from "./pos"
 
 // Convert from LSP's snippet syntax to @codemirror/autocompletion's
 // one. Remove backslashes before `$}]`, which don't support backslash
@@ -76,6 +79,41 @@ function shouldTriggerCompletion(plugin: LSPPlugin, character: string) : "identi
   return null
 }
 
+type TextEdit = {from: number, to: number, text: string}
+
+type ExtraEdits = {index: number, edits: readonly TextEdit[], text: string}
+
+function resultMapper(changes: ChangeDesc | null, extraEdits: ExtraEdits[]) {
+  return (result: CompletionResult, newChanges: ChangeDesc): CompletionResult => {
+    changes = changes ? changes.composeDesc(newChanges) : newChanges
+    let options = result.options.slice()
+    for (let {index, edits, text} of extraEdits)
+      options[index] = {...options[index], apply: applyEdits(edits, text, changes)}
+    return {
+      ...result,
+      options,
+      map: resultMapper(changes, extraEdits)
+    }
+  }
+}
+
+function applyEdits(edits: readonly TextEdit[], text: string, mapped: ChangeDesc | null) {
+  return (view: EditorView, completion: Completion, from: number, to: number) => {
+    let base = insertCompletionText(view.state, text, from, to)
+    let changes: ChangeSpec[] = []
+    for (let {from, to, text} of edits) {
+      if (mapped) {
+        if (mapped.touchesRange(from, to)) continue
+        let len = to - from
+        from = mapped.mapPos(from, 1)
+        to = from + len
+      }
+      changes.push({from, to, insert: text})
+    }
+    view.dispatch(base, {changes})
+  }
+}
+
 /// A completion source that requests completions from a language
 /// server.
 export const serverCompletionSource: CompletionSource = context => {
@@ -93,10 +131,11 @@ export const serverCompletionSource: CompletionSource = context => {
     let {from, to} = completionResultRange(context, result)
     let defaultCommitChars = result.itemDefaults?.commitCharacters
     let config = context.state.facet(completionConfig)
+    let extraEdits: ExtraEdits[] = []
 
     return {
       from, to,
-      options: result.items.map<Completion>(item => {
+      options: result.items.map<Completion>((item, i) => {
         let text = item.textEdit?.newText || item.textEditText || item.insertText || item.label
         let option: Completion = {
           label: item.filterText || item.label,
@@ -110,6 +149,15 @@ export const serverCompletionSource: CompletionSource = context => {
         if (item.sortText) option.sortText = item.sortText
         if (insertTextFormat == 2 /* Snippet */) {
           option.apply = (view, c, from, to) => snippet(lspToSnippet(text))(view, c, from, to)
+        } else if (item.additionalTextEdits) {
+          let edits: TextEdit[] = []
+          for (let edit of item.additionalTextEdits) {
+            let from = fromPositionChecked(context.state.doc, edit.range.start)
+            let to = fromPositionChecked(context.state.doc, edit.range.end)
+            if (from != null && to != null) edits.push({from, to, text: edit.newText})
+          }
+          extraEdits.push({index: i, text, edits})
+          option.apply = applyEdits(edits, text, null)
         } else if (option.label != text) {
           option.apply = text
         }
@@ -118,7 +166,7 @@ export const serverCompletionSource: CompletionSource = context => {
       }),
       commitCharacters: defaultCommitChars,
       validFor: result.isIncomplete ? undefined : (config.validFor ?? prefixRegexp(result.items)),
-      map: (result, changes) => ({...result, from: changes.mapPos(result.from)}),
+      map: extraEdits.length ? resultMapper(null, extraEdits) : undefined
     }
   }, err => {
     if ("code" in err && (err as lsp.ResponseError).code == -32800 /* RequestCancelled */)
